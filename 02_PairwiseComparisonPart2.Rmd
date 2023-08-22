@@ -1,0 +1,507 @@
+---
+title: "02_PairwiseCompPart2"
+output: html_document
+---
+
+### Carlvalho et al., 
+
+***
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+#### Setup and load data
+
+```{r load libraries, include = FALSE}
+library(tidyverse)
+require(tidyverse)
+library(here)
+library(flextable)
+library(jtools)
+library(kableExtra)
+```
+
+
+```{r load data, include = FALSE}
+here()
+df <- read.csv(here("..","..","01_data","all_GPLxBrazil.csv"), header = T, sep = ",")
+names(df)
+#glimpse(df)
+
+```
+
+
+
+
+## How many individuals in each treatment were exposed but uninfected?
+
+```{r data overview , include = FALSE}
+
+infected <- df %>% 
+  group_by(Treatment, StrainID, Lineage_type, FieldN_2, Infected) %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  ungroup() %>% 
+  dplyr::select(Treatment, StrainID, Lineage_type, bd1, n_obs) %>%
+  distinct() %>% as.data.frame()
+infected
+```
+
+
+
+
+```{r early establishment single-genotype infections, include = FALSE}
+
+# First, look at single-genotype infections, so subset
+# Examine early establishment - that is, the Bd load in Swab 1.
+
+bds1 <- df %>% 
+  dplyr::filter(Treatment!= "Coinfected") %>% 
+  group_by(Treatment, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  ungroup() %>% 
+  dplyr::select(Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds1
+
+with(bds1, hist(log(bd1)))
+with(bds1, hist(bd1))
+
+```
+
+```{r check the ditribution, include = FALSE}
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(bds1$bd1,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(bds1$bd1,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(bds1$bd1,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(bds1$bd1,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+```
+
+
+```{r run the model, include = TRUE}
+
+m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+summ(m1)
+#summ.lm(m1)
+
+```
+
+
+## update - clarify why this contrast doesn't work based on Crawley and Bolker
+```{r trial contrast, include = FALSE}
+with(bds1, levels(StrainID))
+coef(m1)
+
+
+contrasts(bds1$StrainID) <- cbind(c(-1, -1, -1, 4, -1),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0))
+contrasts(bds1$StrainID)
+```
+
+```{r trial conrast summary, include=TRUE}
+m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+summ(m1)
+plot(m1)
+
+```
+
+
+```{r subset 2: compare coinfections with P2 to P2 single-genotype infections,  include = FALSE}
+# Second, compare coinfections with P2 to P2 single-genotype infections
+## Does coinfection change competitiveness (early establishment of P1)?
+bds2 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(StrainID == "P2") %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID <- factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds2
+
+
+
+bds3 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "E2-P1") %>% 
+  dplyr::filter(StrainID != "E1-P1") %>% 
+  dplyr::filter(StrainID != "E1-P1-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "E2-P1-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P1-R") %>% 
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID <- factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds3
+
+
+```
+
+
+```{r merge datasets for pairwise contrasts 1, include = FALSE}
+ 
+bds5 <- bind_rows(bds2, bds3) %>% 
+  drop_na()
+bds5
+
+```
+
+
+```{r check the distribution for data subset for coinfections, include = FALSE}
+# require(fitdistrplus) 
+# 
+# with(bds5, factor(StrainID))
+# 
+# with(bds5, hist(log(bd1)))
+# with(bds5, hist(bd1))
+# 
+# fit.norm     <- fitdist(bds5$bd1,"norm", method = c("mle"))
+# plot(fit.norm)
+# #fit.gamma    <- fitdist(bds5$bd1,"gamma", method = c("mle"))#best fit
+# #plot(fit.gamma)
+# fit.weibull  <- fitdist(bds5$bd1,"weibull", method = c("mle"))
+# plot(fit.weibull)
+# fit.lnorm    <- fitdist(bds5$bd1,"lnorm", method = c("mle"))
+# plot(fit.lnorm)
+
+
+```
+
+
+```{r run the candidate models for coinfections, include = TRUE}
+
+
+m1 <- glm(bd1 ~ Treatment, data = bds5)
+summ(m1)
+#summary.lm(m1)
+```
+
+
+## can't use this for this subset since there are zeros in the P2 subset
+* since these zeros are informative, we will keep m1 even though it's a bit different from the P1 comparison (which did not have zeros)
+
+```{r, include = FALSE}
+# m2 <- glm(log(bd1) ~ Treatment,  data = bds4)
+# summary(m2)
+# summary.lm(m2)
+
+# AIC(m1, m2)
+```
+
+
+## No difference here, so we will go with the fits above...
+* above, we see that the log normal fits better - esp. if we consider the Q-Q plot. 
+
+
+```{r set up the next contrasts, include = FALSE}
+
+# bds5$StrainID <- as.factor(bds5$StrainID)
+# 
+# m1 <- glm(bd1 ~ as.factor(StrainID), data = bds5)
+# summary.lm(m1)
+# 
+# with(bds5, levels(StrainID))
+# coef(m1)
+# 
+# contrasts(bds5$StrainID) <- cbind(c(0, 0, 0, 0, 0, 0),
+#                                   c(1, 0, 0, 0, -1, 0),
+#                                   c(0, 0, 0, 0, -1, 1),
+#                                   c(0, 0, 0, 0, 0, 0),
+#                                   c(0, 0, 0, 0, 0, 0),
+#                                   c(0, 0, 0, 0, 0, 0))
+# contrasts(bds5$StrainID)
+# 
+# m1 <- glm(bd1 ~ StrainID,  data = bds5)
+# summary.lm(m1)
+```
+
+## Fourth, transmission potential (total Bd load)
+* Since for Total Bd Load, we are examining whether co-infection had an effect....in that case, we are actually only interested in animals that became infected. 
+  + Remove animals that were exposed but uninfected 
+
+```{r transmission potential (total Bd load), include = FALSE}
+
+trans <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>%
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE),
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, meanbd, logbd, meanGPL, totGPL, meanBZL, totBZL, dod2) %>%
+  distinct() %>% as.data.frame()
+head(trans)
+
+
+
+trans1 <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>%
+  dplyr::filter(StrainID == "P2") %>%
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE),
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, meanbd, logbd, meanGPL, totGPL, meanBZL, totBZL, dod2) %>%
+  distinct() %>% as.data.frame()
+head(trans1)
+
+
+trans2 <- df %>%
+  group_by(ID, Strains, StrainID,Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "E2-P1") %>%
+  dplyr::filter(StrainID != "E1-P1") %>%
+  dplyr::filter(StrainID != "E1-P1-R") %>%
+  dplyr::filter(StrainID != "E1-R") %>%
+  dplyr::filter(StrainID != "E2-p1-R") %>%
+  dplyr::filter(StrainID != "E2-R") %>%
+  dplyr::filter(StrainID != "P1-R") %>%
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE),
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, Strains, StrainID, Treatment, Lineage_type, Lineage, meanbd, logbd, meanGPL, totGPL, meanBZL, totBZL, dod2) %>%
+  distinct() %>% as.data.frame()
+head(trans2)
+
+```
+
+
+```{r merge datasets for pairwise contrasts 2, include = FALSE}
+trans3 <- bind_rows(trans1, trans2)
+trans3
+#End
+```
+
+
+
+```{r check distribiutions for virulence on lifespan, include = FALSE}
+# fairly normal distribution
+with(trans3, hist(log(meanbd)))
+with(trans3, hist(meanbd))
+
+# check the distribution
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(trans3$meanbd,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(trans3$meanbd,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(trans3$meanbd,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(trans3$meanbd,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+
+
+```
+
+
+```{r candidate models, include = TRUE}
+m1 <- glm(meanbd ~ Treatment, family = Gamma(link = "log"), data = trans3)
+summ(m1)
+#summary.lm(m1)
+```
+
+## Now, Virulence on lifespan 
+
+```{r subset data for virulence on lifespan, include = FALSE}
+# Third, compare coinfections with P1 to P1 single-genotype infections
+## Does coinfection change transmission potential
+
+
+
+lifespan1 <- df %>%
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type, Lineage) %>%
+  dplyr::filter(FieldN_2 == "S2") %>% # subset for final, otherwise, we'll double count
+  dplyr::filter(Infected == "1") %>% 
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, Treatment, StrainID, Lineage_type, Lineage, dod2) %>%
+  distinct() %>% as.data.frame()
+lifespan1
+
+
+
+lifespan2 <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>% 
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, meandod) %>%
+  distinct() %>% as.data.frame()
+lifespan2
+
+
+
+
+lifespanP2 <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  dplyr::filter(StrainID == "P2") %>% 
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>% 
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, meandod) %>%
+  distinct() %>% as.data.frame()
+lifespanP2
+
+
+lifespanP2Co <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "E2-P1") %>% 
+  dplyr::filter(StrainID != "E1-P1") %>% 
+  dplyr::filter(StrainID != "E1-P1-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "E2-P1-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P1-R") %>% 
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>% 
+  dplyr::filter(meandod  !=  "0") %>%
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, meandod) %>%
+  distinct() %>% as.data.frame()
+lifespanP2Co
+
+```
+
+
+```{r merge datasets for pairwise contrasts 3, include = FALSE}
+
+P2life <- bind_rows(lifespanP2, lifespanP2Co)
+P2life
+
+```
+
+
+
+```{r check distributions, include = FALSE}
+# fairly normal distribution
+with(P2life, hist(meandod))
+with(P2life, hist(log(meandod)))
+with(P2life, hist(sqrt(meandod)))
+
+
+with(P2life, range(meandod))
+
+library(fitdistrplus)
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(P2life$meandod,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(P2life$meandod,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(P2life$meandod,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(P2life$meandod,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+
+```
+
+
+```{r run the candidate models, include = FALSE}
+
+lm1<- glm(meandod ~ Treatment, data = P2life)
+lm1
+#summary.lm(lm1)
+summ(lm1)
+plot(lm1)
+
+# no evidence of hetero
+library(lmtest)
+lmtest::bptest(lm1) # reject null = hetero
+
+m5 <- glm(meandod  ~ Treatment, data = P2life)
+m6 <- glm(log(meandod)  ~ Treatment, data = P2life)
+
+
+AIC(m5, m6) 
+
+summ(m6)
+#summary.lm(m6)
+plot(m6)
+m5
+
+```
+
+
+```{r summary tables for output, include=TRUE}
+summ(lm1)
+plot(lm1)
+summ(m6)
+plot(m6)
+```
+
+
+
+
+
+```{r data summaries for inspection, include = FALSE}
+relP2 <- df %>%
+  group_by(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2,  Day_swab, TotalBd) %>%
+  filter(Treatment == "Coinfected") %>% 
+  mutate(meanGPL = mean(GPL_pg, na.rm = T)) %>%
+  mutate(totGPL  = sum(GPL_pg, na.rm = T)) %>%
+  mutate(meanBZL = mean(Brazil_pg, na.rm = T)) %>%
+  mutate(totBZL  = sum(Brazil_pg, na.rm = T)) %>%
+  mutate(meanH   = mean(Hybrid , na.rm = T)) %>%
+  mutate(totH    = sum(Hybrid , na.rm = T)) %>%
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2,  Day_swab, meanGPL, totGPL, meanBZL, totBZL, meanH, totH, TotalBd) %>%
+  distinct() %>% as.data.frame()
+head(relP2)
+
+
+relP2a <- relP2 %>% 
+  group_by(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2, Day_swab) %>% 
+  mutate(totbd   = sum(totGPL + totBZL + totH, na.rm = T)) %>%
+  mutate(relgpl  = (totGPL/TotalBd)) %>%
+  group_by(StrainID) %>%
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2, Day_swab, relgpl) %>%
+  distinct() %>% as.data.frame()
+head(relP2a)
+
+
+relP2b<- relP2a %>% 
+  group_by(StrainID, Treatment, FieldN_2) %>%
+  filter(Treatment == "Coinfected") %>% 
+  filter(FieldN_2 == "S2") %>% 
+  mutate(dayofdeath = mean(Day_swab, na.rm = TRUE)) %>% 
+  mutate(meanrelgpl = mean(relgpl, na.rm = TRUE)) %>% 
+  mutate(nobs = n()) %>% 
+  mutate(relgplse = sd(relgpl, na.rm = TRUE)/sqrt(nobs)) %>%
+  mutate(meandod = mean(Day_swab, na.rm = TRUE)) %>% 
+  mutate(nobs = n()) %>% 
+  mutate(dodse = sd(Day_swab, na.rm = TRUE)/sqrt(nobs)) %>%
+  dplyr::select(StrainID, Lineage_type, meandod, dodse, meanrelgpl, relgplse, dayofdeath) %>%
+  distinct() %>% as.data.frame()
+relP2b
+
+
+```
+

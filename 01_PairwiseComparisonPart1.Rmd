@@ -1,0 +1,1520 @@
+---
+title: "01_PairwiseCompPart1"
+output: html_document
+date: "2022-09-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Coinfection with chytrid genotypes drives divergent infection dynamics reflecting regional distribution patterns.
+### Carlvalho et al.
+
+***
+```{r, include = FALSE}
+#load libraries
+library(tidyverse)
+require(tidyverse)
+#library(conflicted) # can use this if conflicts/weird errors arise
+library(mgcv)
+library(multcomp)
+require(fitdistrplus) 
+library(AICcmodavg)
+library(lmtest) # The null hypothesis of the Breusch-Pagan test is that the variance in the model is homoskedastic. 
+library(jtools)
+library(car)
+library(here)
+```
+
+
+```{r PlotTheme}
+  singlefigtheme <- theme_classic() + theme(axis.title.x = element_text(size = 12, face = "bold"),
+                       axis.title.y = element_text(size = 12),
+                       axis.text.x = element_text(size = 12),
+                       axis.text.y = element_text(size = 12))
+
+  multifigtheme <- singlefigtheme + theme(axis.title.x = element_blank(),
+                                      axis.text.x = element_blank(),
+                                      legend.key = element_rect(colour = NA, fill = NA))
+
+  col3 <- c("#563caa","#563caa","#90aa3c", "#3caa56")
+  
+
+
+```
+
+
+#### Goals: 
+1) Look at distributions of the data to inform statistics
+2) Run pairwise comparisons 
+3) Calculate significance of pairwise differences using the 
+glht function in the multcomp package - this corrects for false discover rate due to multiple comparisons
+Check levels of heteroscedasticity - allow variance to vary using the gls function  in the nlme package. 
+
+***
+
+```{r load data, include = FALSE}
+
+df <- read.csv(here("..", "..", "01_data", "all_GPLxBrazil.csv"), header = T, sep = ",") %>% 
+  filter(!(StrainID == "E1-R" | StrainID == "E2-R"))
+
+df <- read.csv("all_GPLxBrazil.csv", header = T, sep = ",") %>% 
+  filter(!(StrainID == "E1-R" | StrainID == "E2-R"))
+names(df)
+glimpse(df)
+names(df)
+```
+
+
+
+```{r set up to examine the effects of initial load on competiveness regardless of strain/genotyoe identity, include = FALSE, echo = FALSE}
+# this  'competitiveness' metric is pathogen load 21 days post infection/competitiveness/ability to establish
+
+stats <- df %>% 
+  group_by(Treatment, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(FieldN_2 == "S1") %>% # select laod 21 days post infection
+  dplyr::filter(TotalBd > 0) %>% # select successful infections
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% # need the mean Bd load on the first swab
+  dplyr::filter(bd1 < 1400) %>% # remove extreme outlier, note, we ran all of the stats with and without this outlier and it did not qualitatively affect results
+  mutate(logbd1 = log(TotalBd), na.rm = TRUE) %>% # log transform the mean Bd load on the first swab
+  mutate(meanlogbd1 = mean(logbd1), na.rm = TRUE) %>% # need the mean Bd load on the first swab
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(Treatment, ID, StrainID, Lineage_type, FieldN_2, bd1,  
+                StrainSpecificInitialDoseZoosporesPermL, meanlogbd1) %>%
+  distinct() %>% as.data.frame()
+stats
+
+
+```
+
+
+```{r run stats on the effects of initial load on competiveness regardless of strain/genotyoe identity or single vs. coinfection treatment, include = FALSE}
+
+m2 <- glm(bd1 ~ Treatment + as.numeric(StrainSpecificInitialDoseZoosporesPermL), family = Gamma(link = "log"), data = stats)
+summary(m2)
+summary.lm(m2)
+summ(m2)
+Anova(m2, type = 'III')
+plot(m2)
+lmtest::bptest(m2) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m2)
+
+```
+
+
+
+
+```{r set up for stats to examine the effects of initial load on competiveness regardless of strain/genotyoe identity, include = FALSE}
+# this  'competitiveness' metric is pathogen load 21 days post infection/competitiveness/ability to establish
+
+stats1 <- df %>% 
+  group_by(Treatment, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(FieldN_2 == "S1") %>% # select laod 21 days post infection
+  dplyr::filter(Treatment== "Coinfected") %>% # select coninfected treatments
+  dplyr::filter(TotalBd > 0) %>% # select successful infections
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% # need the mean Bd load on the first swab
+  dplyr::filter(bd1 < 1400) %>% # remove extreme outlier, note, we ran all of the stats with and without this outlier and it did not qualitatively affect results
+  mutate(logbd1 = log(TotalBd), na.rm = TRUE) %>% # log transform the mean Bd load on the first swab
+  mutate(meanlogbd1 = mean(logbd1), na.rm = TRUE) %>% # need the mean Bd load on the first swab
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(Treatment, ID, StrainID, Lineage_type, FieldN_2, bd1,  
+                StrainSpecificInitialDoseZoosporesPermL, meanlogbd1) %>%
+  distinct() %>% as.data.frame()
+stats1
+
+
+```
+
+```{r run stats on the effects of initial load on competiveness regardless of strain/genotyoe identity, include = FALSE}
+
+m2 <- glm(bd1 ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL), family = Gamma(link = "log"), data = stats1)
+summary(m2)
+summary.lm(m2)
+summ(m2)
+Anova(m2, type = 'III')
+plot(m2)
+lmtest::bptest(m2) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m2)
+
+
+m3 <- glm(bd1 ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL), data = stats1)
+summary(m3)
+summary.lm(m3)
+summ(m3)
+Anova(m2, type = 'III')
+plot(m3)
+lmtest::bptest(m3) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m3)
+
+fits <- AIC(m2, m3) 
+fits
+
+cand.set <- list(m2, m3)
+aictab(cand.set)
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(m2)[2]) 
+
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+```
+
+
+```{r run stats on the effects of initial load on competiveness when accounting for strain-specific differences, include = FALSE}
+# can't include as a covariate b/c model is overfit 
+m4 <- glm(bd1 ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL)*StrainID, family = Gamma(link = "log"), data = stats1)
+summary(m4)
+summary.lm(m4)
+summ(m4)
+plot(m4)
+lmtest::bptest(m4) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m4)
+
+
+# P1 coinfections, does
+m5 <- glm(bd1 ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL) + StrainID, data = stats1)
+summary(m5)
+summary.lm(m5)
+#Anova(m5, type = 'III')
+summ(m5)
+plot(m5)
+lmtest::bptest(m5) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m5)
+
+#fits <- AIC(m4, m5) 
+#fits
+
+#cand.set <- list(m4, m5)
+#aictab(cand.set)
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(m4)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+```
+
+
+##### Appendix Plots - Competitveness and initial pathogen dose
+
+```{r plot competitiveness and initial dose 1, include = TRUE}
+  doselabel <- c("9.93 x 10^5", "1.49 x 10^6") # 
+  names(doselabel) <- c("993333",  "1490000.0")
+
+
+DoseCompPlot <- ggplot(stats1, aes(x = as.factor(StrainSpecificInitialDoseZoosporesPermL),  y = bd1, color = StrainID))+
+  geom_boxplot(outlier.shape=NA)+
+  #stat_summary(fun.data = mean_se, size = 1.5,
+    #           alpha = 1.75, position = position_dodge(0.2))+
+    #geom_point(position = position_dodge(0.2), size = 2, alpha = 0.30)+
+    #geom_jitter(width = 0.5, height = 1.85, alpha = 0.30, size = 3) +
+    #scale_color_manual(values = c("#563caa", "darkcyan", "#90aa3c", "#3caa56" , "continuous"), name = "StrainID") +
+  geom_point(position = position_jitterdodge(), alpha = 0.3)+
+  singlefigtheme +
+  scale_x_discrete(labels =  c("9.93 x 10^5", "1.49 x 10^6"))+ 
+  ylab("Competiveness (early Bd load)") + 
+  xlab("Initial pathogen dose per genotype (zoospores/mL)") +
+  theme(panel.spacing = unit(1.05, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.25),
+        #axis.title.x = element_blank(),
+        #axis.text.x = element_blank(),
+        #legend.position = c(0.5, 0.9), legend.direction = "horizontal", 
+        legend.position = "right", 
+        strip.text.x = element_text(size = 12, face = "bold"))+
+  guides(color = guide_legend("Genotype ID"))
+
+DoseCompPlot 
+
+ggsave("DoseCompPlot.png", height = 3.5, width = 10, dpi = 600)
+
+initialdoseplot1 <- tiff("DoseCompPlot.tiff", width = 15, height = 22, units = "cm", res = 300, pointsize = 10) 
+initialdoseplot1
+dev.off() 
+
+```
+
+
+
+
+
+
+
+#### First, look at single-genotype infections, so subset
+* Examine early establishment - that is, the Bd load in Swab 1.
+
+```{r subset single-genotype infections , include = FALSE}
+
+bds1 <- df %>% 
+  dplyr::filter(Treatment!= "Coinfected") %>% 
+  group_by(Treatment, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(Treatment, ID, StrainID, Lineage_type, bd1, TotalInitialDoseZoosporesPermL, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+bds1
+
+```
+
+
+```{r histograms of echo Bd load at first swab date, FALSE, include = TRUE}
+
+with(bds1, hist(log(bd1)))
+with(bds1, hist(bd1))
+
+```
+
+
+
+```{r check the distribution, include = FALSE}
+
+fit.norm     <- fitdist(bds1$bd1,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(bds1$bd1,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(bds1$bd1,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(bds1$bd1,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+
+```
+
+```{r run the model, include = FALSE}
+m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+summary(m1)
+summary.lm(m1)
+
+
+with(bds1, levels(StrainID))
+coef(m1)
+```
+
+
+```{r set up contrasts, include = FALSE}
+contrasts(bds1$StrainID) <- cbind(c(-1, 4, -1, -1, -1),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0))
+contrasts(bds1$StrainID)
+                             
+m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+summary.lm(m1)
+
+```
+
+
+
+
+
+#### Second, compare coinfections with P1 to P1 single-genotype infections
+* Does coinfection change competitiveness (early establishment of P1)?
+
+```{r subset 1: Compare coinfections with P1 to P1 single-genotype infections, include = FALSE}
+
+bds2 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(StrainID == "P1") %>%
+  dplyr::filter(FieldN_2 == "S1") %>% # this gives you the first swab after exposure, metric of early establishment 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% # initial dose (after exposure)
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, 
+                bd1, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+bds2
+
+is.factor(bds2$StrainID)
+```
+
+
+```{r subset 2: Compare coinfections with P1 to P1 single-genotype infections, include = FALSE}
+bds3 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "P2-E2") %>% 
+  dplyr::filter(StrainID != "P2-E1") %>% 
+  dplyr::filter(StrainID != "P2-E1-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "P2-E2-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P2-R") %>% 
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, 
+                bd1, TotalInitialDoseZoosporesPermL, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+bds3
+
+# merge dataset for pairwise contrasts
+bds4 <- bind_rows(bds2, bds3)
+```
+
+
+```{r distributions for next set of analyses with combined dataset, include = TRUE}
+ 
+
+
+with(bds4, hist(log(bd1)))
+with(bds4, hist(bd1))
+
+```
+
+
+
+```{r set up the next contrasts, include = FALSE}
+
+contrasts(bds1$StrainID) <- NULL
+
+with(bds1, levels(StrainID))
+coef(m1)
+
+contrasts(bds1$StrainID) <- cbind(c(4, -1, -1, -1, -1),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0),
+                                  c(0,0,0,0,0))
+contrasts(bds1$StrainID)
+
+m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+summary.lm(m1)
+
+
+```
+
+
+
+#### Third, compare coinfections with P1 to P1 single-genotype infections
+
+```{r Virulence on lifespan, include = FALSE}
+
+lifespan1 <- df %>%
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type, Lineage) %>%
+  dplyr::filter(FieldN_2 == "S2") %>% # subset for final, otherwise, we'll double count
+  dplyr::filter(Infected == "1") %>% 
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>%  
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, Treatment, StrainID, Lineage_type, Lineage, dod2, 
+                bd1, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+lifespan1
+
+
+lifespan2 <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>% 
+  mutate(meanbd = mean(bd1, na.rm = TRUE)) %>%  
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, meandod, meanbd,
+                StrainSpecificInitialDoseZoosporesPermL) %>%
+  dplyr::filter(meandod  !=  "0") %>%
+  distinct() %>% as.data.frame()
+lifespan2
+
+
+lifespanP1 <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  dplyr::filter(StrainID == "P1") %>% 
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>% 
+  mutate(meanbd = mean(bd1, na.rm = TRUE)) %>% 
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, 
+                meandod, meanbd, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+lifespanP1
+
+
+lifespanP1Co <- lifespan1 %>% 
+  group_by(ID, Infected, Treatment, StrainID, Lineage_type) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "P2-E2") %>% 
+  dplyr::filter(StrainID != "P2-E1") %>% 
+  dplyr::filter(StrainID != "P2-E1-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "P2-E2-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P2-R") %>% 
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>%
+  mutate(meanbd = mean(bd1, na.rm = TRUE)) %>% 
+  dplyr::filter(meandod  !=  "0") %>%
+  dplyr::select(ID, Infected, Treatment, StrainID, Lineage_type, 
+                meandod, meanbd, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+lifespanP1Co
+
+
+
+
+
+# merge datasets for pairwise contrasts
+P1life <- bind_rows(lifespanP1, lifespanP1Co)
+P1life
+
+```
+
+
+```{r check distribiutions for virulence on lifespan, include = FALSE}
+# fairly normal distribution
+with(P1life, hist(meandod))
+with(P1life, hist(log(meandod)))
+with(P1life, hist(sqrt(meandod)))
+
+
+with(P1life, range(meandod))
+
+library(fitdistrplus)
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(P1life$meandod,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(P1life$meandod,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(P1life$meandod,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(P1life$meandod,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+```
+
+
+```{r candidate models part 2a now inlcude inlcude initial dose of all strains together 2 - is there a difference across single vs coinfected treatments, include = FALSE}
+library(jtools)
+
+lm3a <- glm(meandod ~ StrainSpecificInitialDoseZoosporesPermL + Treatment, family = Gamma(link = "log"), data = lifespan2)
+lm3a
+summary.lm(lm3a)
+
+summary(lm3a)
+plot(lm3a)
+summ(lm3a) # For co-infections involving P1, initial total dose affected the tripple infection with P1, but not the other treatments
+
+```
+
+
+```{r candidate models part 2 now inlcude inlcude initial dose of all strains together 2, include = FALSE}
+library(jtools)
+
+lm3a <- glm(meandod ~ StrainSpecificInitialDoseZoosporesPermL, family = Gamma(link = "log"), data = lifespanP1Co)
+lm3a
+summary.lm(lm3a)
+summary(lm3a)
+plot(lm3a)
+summ(lm3a) # For co-infections involving P1, initial total dose affected the tripple infection with P1, but not the other treatments
+
+
+
+# the full model with interaction appears to be overfit, can't use
+lm2a <- glm(meandod ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL) + StrainID, family = Gamma(link = "log"), data = lifespanP1Co)
+lm2a
+summary.lm(lm2a)
+summary(lm2a)
+plot(lm2a)
+summ(lm2a)
+
+
+#fits <- AIC(lm2a, lm3a) 
+#fits
+
+#cand.set <- list(lm2a, lm3a)
+#aictab(cand.set)
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(lm2a)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+```
+
+
+
+
+
+##### Appendix Plots - Survival (mean day of death) and initial pathogen dose
+
+```{r plot competitiveness and initial dose 2, include = TRUE}
+  doselabel <- c("9.93 x 10^5", "1.49 x 10^6") 
+  names(doselabel) <- c("993333",  "1490000.0")
+
+
+DoseMortalityPlot <- ggplot(lifespanP1Co, aes(x = as.factor(StrainSpecificInitialDoseZoosporesPermL),  y = meandod, color = StrainID))+
+  geom_boxplot(outlier.shape = NA)+
+  #stat_summary(fun.data = mean_se, size = 1.5,
+    #           alpha = 1.75, position = position_dodge(0.2))+
+  geom_point(position=position_jitterdodge(0.16), size = 2, alpha = 0.30)+
+    #geom_jitter(width = 0.1, height = 1.85, alpha = 0.30, size = 3) +
+    #scale_color_manual(values = c("#563caa", "darkcyan", "#90aa3c", "#3caa56" , "continuous"), name = "StrainID") +
+  singlefigtheme +
+  scale_x_discrete(labels =  c("9.93 x 10^5", "1.49 x 10^6"))+
+  ylab("Host survival (day of death)") + 
+  xlab("Initial pathogen dose per genotype (zoospores/mL)") +
+  theme(panel.spacing = unit(1.05, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.25),
+        #axis.title.x = element_blank(),
+        #axis.text.x = element_blank(),
+        #legend.position = c(0.5, 0.9), legend.direction = "horizontal", 
+        legend.position = "right", 
+        strip.text.x = element_text(size = 12, face = "bold"))+
+  guides(color = guide_legend("Genotype ID"))
+
+DoseMortalityPlot
+
+ggsave("DoseMortalityPlot.png", height = 3.5, width = 10, dpi = 600)
+
+initialdoseplot1 <- tiff("DoseMortalityPlot.tiff", width = 15, height = 22, units = "cm", res = 300, pointsize = 10) 
+initialdoseplot1
+dev.off() 
+
+```
+
+```{r data wrangling initial dose on transmission potential across single and coinfection treatments, include = FALSE}
+
+# subset data to quantify dose at swab 1 and break this apart for each strain
+
+
+transp01 <- df %>%
+  group_by(ID, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% 
+  dplyr::filter(TotalBd < 1000) %>% # we ran these analyses with and without this outlier and it did not qualitatively affect the results
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, 
+                meanbd, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(transp01)
+
+```
+
+
+
+
+```{r candidate models now inlcude inlcude initial dose on transmission potential per strains across single and coinfection treatments, include = FALSE}
+library(jtools)
+
+lm30a <- glm(meanbd ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL) + Treatment, family = Gamma(link = "log"), data = transp01)
+lm30a
+summary.lm(lm30a)
+summary(lm30a)
+plot(lm30a)
+summ(lm30a)
+aov(lm30a)
+Anova(lm30a , Type = III)
+
+```
+
+
+```{r data wrangling initial dose on transmission potential, include = FALSE}
+
+# subset data to quantify dose at swab 1 and break this apart for each strain
+
+
+transp2 <- df %>%
+  filter(Treatment == "Coinfected") %>% 
+  group_by(ID, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% 
+  dplyr::filter(TotalBd < 1000) %>% # we ran these analyses with and without this outlier and it did not qualitatively affect the results
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, 
+                meanbd, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(transp2)
+
+```
+
+
+
+```{r candidate models now inlcude inlcude initial dose on transmission potential across all strains, include = FALSE}
+library(jtools)
+
+
+lm31a <- glm(meanbd ~ StrainSpecificInitialDoseZoosporesPermL, family = Gamma(link = "log"), data = transp2)
+lm31a
+summary.lm(lm31a)
+summary(lm31a)
+plot(lm31a)
+summ(lm31a) # For co-infections involving P1, initial total dose affected the tripple infection with P1, but not the other treatments
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(lm31a)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+
+
+
+```
+
+
+
+```{r candidate models now inlcude inlcude initial dose on transmission potential per strains, include = FALSE}
+library(jtools)
+
+#overfit = don't use
+lm31a <- glm(meanbd ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL)*StrainID, family = Gamma(link = "log"), data = transp2)
+lm31a
+summary.lm(lm31a)
+summary(lm31a)
+plot(lm31a)
+summ(lm31a)
+aov(lm31a)
+Anova(lm31a, Type = III)
+
+
+lm41a <- glm(meanbd ~ StrainSpecificInitialDoseZoosporesPermL + StrainID, family = Gamma(link = "log"), data = transp2)
+lm41a
+summary.lm(lm41a)
+summary(lm41a)
+plot(lm41a)
+summ(lm41a) # For co-infections involving P1, initial total dose affected the tripple infection with P1, but not the other treatments
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(lm41a)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+```
+
+
+
+
+##### Appendix Plots - Transmission potential (final Bd load) and initial pathogen dose
+
+```{r plot Transmission potential and initial dose, include = TRUE}
+  doselabel <- c("9.93 x 10^5", "1.49 x 10^6") # 
+  names(doselabel) <- c("993333",  "1490000.0")
+
+
+DoseTransmissionPlot <- ggplot(transp2, aes(x = as.factor(StrainSpecificInitialDoseZoosporesPermL),  y = meanbd, color = StrainID))+
+  geom_boxplot()+
+  #stat_summary(fun.data = mean_se, size = 1.5,
+    #           alpha = 1.75, position = position_dodge(0.2))+
+    #geom_point(position = position_dodge(0.2), size = 2, alpha = 0.30)+
+    #geom_jitter(width = 0.5, height = 1.85, alpha = 0.30, size = 3) +
+    #scale_color_manual(values = c("#563caa", "darkcyan", "#90aa3c", "#3caa56" , "continuous"), name = "StrainID") +
+  geom_point(position=position_jitterdodge(0.16), alpha = 0.30)+
+  singlefigtheme +
+  scale_x_discrete(labels =  c("9.93 x 10^5", "1.49 x 10^6"))+
+  ylab("Transmission potential (total Bd load)") + 
+  xlab("Initial pathogen dose per genotype (zoospores/mL)") +
+  theme(panel.spacing = unit(1.05, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.25),
+        #axis.title.x = element_blank(),
+        #axis.text.x = element_blank(),
+        #legend.position = c(0.5, 0.9), legend.direction = "horizontal", 
+        legend.position = "right", 
+        strip.text.x = element_text(size = 12, face = "bold"))+
+    guides(color = guide_legend("Genotype ID"))
+DoseTransmissionPlot 
+
+ggsave("DoseTransmissionPlot.png", height = 3.5, width = 10, dpi = 600)
+
+initialdoseplot1 <- tiff("DoseTransmissionPlot.tiff", width = 15, height = 22, units = "cm", res = 300, pointsize = 10) 
+initialdoseplot1
+dev.off() 
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{check for evidence of heterogeneity, include = FALSE}
+library(lmtest)
+lmtest::bptest(lm1) # reject null = hetero
+
+```
+
+
+```{r next set of candidate models 1, include = FALSE}
+
+m5 <- glm(meandod  ~ Treatment, data = P1life)
+m6 <- glm(log(meandod)  ~ Treatment, data = P1life)
+
+
+AIC(m5, m6) 
+
+summary(m6)
+summary.lm(m6)
+plot(m6)
+m5
+
+
+```
+
+
+#### Fourth, transmission potential (total Bd load)
+* Since for Total Bd Load, we are examining whether co-infection had an effect....in that case, we are actually only interested in animals that became infected. 
+  + Remove animals that were exposed but uninfected 
+* Does coinfection change transmission potential (final dose)?
+* Does the initial dose influence final Bd load? 
+
+```{r subset and erge data for transmission potential (total Bd load), include = FALSE}
+trans <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% 
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE), 
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, 
+                meanbd, logbd, meanGPL, totGPL, meanBZL, totBZL, 
+                dod2, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(trans)
+
+
+
+trans1 <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% 
+  dplyr::filter(StrainID == "P1") %>%
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE), 
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+         mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, 
+                meanbd, logbd, meanGPL, totGPL, meanBZL, totBZL, 
+                dod2, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(trans1)
+
+
+trans2 <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% 
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "P2-E2") %>% 
+  dplyr::filter(StrainID != "P2-E1") %>% 
+  dplyr::filter(StrainID != "P2-E1-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "P2-E2-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P2-R") %>%
+  mutate(meanbd  = mean(TotalBd, na.rm = TRUE), 
+         logbd   = mean(log(TotalBd), na.rm = TRUE),
+         meanGPL = mean(GPL_pg, na.rm = TRUE),
+         totGPL  = sum(GPL_pg, na.rm = TRUE),
+         meanBZL = mean(Brazil_pg, na.rm = TRUE),
+         totBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, Strains, StrainID, Treatment, Lineage_type, Lineage, meanbd, 
+                logbd, meanGPL, totGPL, meanBZL, totBZL, dod2,
+                StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(trans2)
+
+
+
+# subset data to quantify dose at swab 1 and break this apart for each strain
+transp2 <- df %>%
+  group_by(ID, Strains, StrainID, Treatment, Lineage_type, Lineage) %>%
+  dplyr::filter(TotalBd > 0) %>% # we still want only infected animals otherwise the data won't align. 
+  dplyr::filter(FieldN_2 == "S1") %>% # subset for final, otherwise, we'll double count
+  mutate(initmeanbd  = mean(TotalBd, na.rm = TRUE), 
+         initlogbd   = mean(log(TotalBd), na.rm = TRUE),
+         initmeanGPL = mean(GPL_pg, na.rm = TRUE),
+         inittotGPL  = sum(GPL_pg, na.rm = TRUE),
+         initmeanBZL = mean(Brazil_pg, na.rm = TRUE),
+         inittotBZL  = sum(Brazil_pg, na.rm = TRUE)) %>%
+  dplyr::select(ID,  StrainID, Treatment, Lineage_type, Lineage, 
+                initmeanbd, initlogbd, initmeanGPL, inittotGPL, 
+                initmeanBZL, inittotBZL, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+head(transp2)
+
+
+
+# merge datasets for pairwise contrasts and models
+trans3 <- bind_rows(trans1, trans2)
+
+```
+
+
+
+```{r candidate models part 2 now inlcude inlcude initial dose of all strains together 1, include = FALSE}
+library(jtools)
+
+# this full model appears to be overfit, can't use
+lm2a <- glm(meandod ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL), family = Gamma(link = "log"), data = lifespanP1Co)
+lm2a
+summary.lm(lm2a)
+summary(lm2a)
+plot(lm2a)
+summ(lm2a)
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(lm2a)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+
+
+lm3a <- glm(meandod ~ StrainSpecificInitialDoseZoosporesPermL + StrainID, family = Gamma(link = "log"), data = lifespanP1Co)
+lm3a
+summary.lm(lm3a)
+summary(lm3a)
+plot(lm3a)
+summ(lm3a) # For co-infections involving P1, initial total dose affected the tripple infection with P1, but not the other treatments
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(lm3a)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+
+
+```
+
+
+```{r Visualize fit of data to different distribution, include = FALSE}
+##Visualize fit of data to different distribution
+#require(fitdistrplus) # this package introduces conflicts that cause problems later so don't re-run
+
+#fit.norm     <- fitdist(summarybd$meanbd,"norm")  
+#fit.gamma    <- fitdist(summarybd$meanbd,"gamma")
+#fit.weibull  <- fitdist(summarybd$meanbd,"weibull")
+#fit.lnorm    <- fitdist(summarybd$meanbd,"lnorm")
+# 
+# 
+# summary(fit.norm)    
+# summary(fit.gamma)   
+# summary(fit.weibull) 
+# summary(fit.lnorm)   
+
+# Log normal fits best, apparently the best way to deal with this in the glm framework 
+# is to log transform the data...
+
+```
+
+```{r Test for heteroscedasticity, include = FALSE}
+
+lm1 <- glm(meanbd ~ Strains, data = trans3)
+lm2 <- glm(logbd ~ Strains, data = trans3)
+
+# no evidence of hetero
+library(lmtest)
+lmtest::bptest(lm1) # reject null = hetero
+lmtest::bptest(lm2) # reject null = hetero
+
+# fairly normal distribution
+with(trans3, hist(meanbd))
+with(trans3, hist(log(meanbd)))
+with(trans3, hist(sqrt(meanbd)))
+
+```
+
+
+```{r more distribution checking, include = FALSE}
+with(trans3, range(meanbd))
+
+library(fitdistrplus)
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(trans3$meanbd,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(trans3$meanbd,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(trans3$meanbd,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(trans3$meanbd,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+
+```
+
+1) **run the full model: does the average Bd load (i.e., take the mean of the total bd load the each frog experienced over the experiment)**
+```{r run the models, include = FALSE}
+m1 <- gam(meanbd ~ Strains, data = subset(trans, Treatment!= "Coinfected"), family = gaussian)
+# m1 diagnostics
+anova.gam(m1)
+summary(m1)
+gam.check(m1, k.rep = 1000)
+
+
+m2 <- gam(meanbd ~ Strains*Lineage_type, data = trans)
+anova.gam(m2)
+summary(m2)
+m1
+
+
+```
+
+
+
+2) **now look at the PAIR-WISE ORTHOGANAL CONTRASTS**
+  + Strains:
+    - 41 e1 medium virulence, endemic: E1
+    - 168 most virulence, pandemic: P1
+    - 172 most virulent, endemic: E2
+    - 198 least virulent, pandemic: P2
+    - c1: 168_041 contrast with 168 single infection (#2 and #1, respectively)
+    - c2: 168_172 contrast with 168 single infection (#3 and #1, respectively )
+    - c3: 198_041 contrast with 041 single infection (#8 and #12, respectively)
+    - c4: 198_172 contrast with 172 single infection (#9 and #5, respectively)
+    - 41_24_02
+    - 172_24_02
+    - 168_24_02
+    - 198_24_02
+    - 24_02
+
+```{r make sure multcomp is loaded, include = FALSE}
+library(multcomp)
+```
+
+
+##### First, just single infections to P1
+
+###### Define the initial contrast matrix
+* use -1 for the baseline group (here, comparing load in coninfection to the the most virulent strain in the single infections, based on host lifespan). 
+  + This says, does coinfection decrease virulence relative to single infections?
+
+```{r define the initial contrast matrix, include = FALSE}
+cmat <- rbind("168.vs.172" = c1 <- c(-1,1,0,0,0),
+              "168.vs.198" = c2 <- c(-1,0,1,0,0),
+              "168.vs.41"  = c3 <- c(-1,0,0,1,0),
+              "168.vs.24" = c4 <- c(-1,0,0,0,1))
+cmat
+
+summary(glht(m1, linfct = cmat))
+plot(summary(glht(m1, linfct = cmat)))
+```
+
+
+
+**Approach 1** : Compare R single infection (reference strain) against each other coinfection strain infection
+
+```{r single-strain comparisons, include = FALSE}
+cmat <- rbind("168_041.vs.168" = c1 <- c(-1,1,0,0,0,0,0,0,0,0,0,0,0),
+              "168_172.vs.172" = c2 <- c(-1,0,1,0,0,0,0,0,0,0,0,0,0),
+              "198_041.vs.41"  = c3 <- c(0,0,0,0,0,0,0,1,0,0,0,-1,0),
+              "198_172.vs.172" = c4 <- c(0,0,0,0,-1,0,0,0,1,0,0,0,0),
+              "41.vs.172" = c5 <- c(0,0,0,0,-1,0,0,0,0,0,0,1,0),
+              "168.vs.198" = c6 <- c(-1,0,0,0,0,0,1,0,0,0,0,0,0),
+              "41.vs.172.vs.198.vs.24_02" = c7 <- c(0,0,0,0,1/3,0,1/3,0,0,0,1/3,0,0),
+              "R.vs.E1." = c8 <- c(0,0,0,0,0,0,0,0,0,0,-1,1,0),
+              "R.vs.E2." = c9 <- c(0,0,0,0,1,0,0,0,0,0,-1,0,0),
+              "R.vs.P1." = c10 <- c(1,0,0,0,0,0,0,0,0,0,-1,0,0),
+              "R.vs.P2." = c11 <- c(0,0,0,0,0,0,1,0,0,0,-1,0,0))
+cmat
+
+```
+
+
+**Approach 2** : How do coinfections alter virulence and transmission potential?
+
+######  Compare R single infection (P1 (168) and P2 (198) as reference strains) against each coinfection
+```{r next set of pair-wise comparisons, include = FALSE}
+# Compare R single infection (P1 (168) and P2 (198) as reference strains) against each coinfection
+cmat <- rbind("168_041.vs.168" = c1 <- c(-1,1,0,0,0,0,0,0,0,0,0,0,0),
+              "168_172.vs.168" = c2 <- c(-1,0,1,0,0,0,0,0,0,0,0,0,0),
+              "198_041.vs.198"  = c3 <- c(0,0,0,0,0,0,-1,1,0,0,0,0,0),
+              "198_172.vs.198" = c4 <- c(0,0,0,0,1,0,-1,0,0,0,0,0,0),
+              "41.vs.172" = c5 <- c(0,0,0,0,-1,0,0,0,0,0,0,1,0),
+              "168.vs.198" = c6 <- c(-1,0,0,0,0,0,1,0,0,0,0,0,0),
+              "41.vs.172.vs.198.vs.24_02" = c7 <- c(0,0,0,0,1/3,0,1/3,0,0,0,1/3,0,0),
+              "R.vs.E1." = c8 <- c(0,0,0,0,0,0,0,0,0,0,-1,1,0),
+              "R.vs.E2." = c9 <- c(0,0,0,0,1,0,0,0,0,0,-1,0,0),
+              "R.vs.P1." = c10 <- c(1,0,0,0,0,0,0,0,0,0,-1,0,0),
+              "R.vs.P2." = c11 <- c(0,0,0,0,0,0,1,0,0,0,-1,0,0))
+cmat
+
+
+
+#summary(glht(m1, linfct = cmat))
+#plot(summary(glht(m1, linfct = cmat)))
+
+
+```
+
+
+
+```{r Double check results against anova, inlcude = FALSE, fig.show='hide'}
+m2 <- aov(bd1 ~ StrainID, data = subset(bds1, Treatment != "Coinfected"))
+
+t1 <- TukeyHSD(m2)
+plot(t1)
+
+library(multcomp)
+```
+
+
+```{r Define the contrast matrix, inlcude = FALSE, results = "hide"}
+# Compare R single infection (reference strain) against each other single strain infection
+# USE 
+cmat <- rbind("P1.vs.E1-P1" = c1 <- c(0,1,0,0,0,0,0,0,-1,0,0,0,0),
+              "E2-P1.vs.E2" = c2 <- c(0,0,0,0,-1,1,0,0,0,0,0,0,0),
+              "E1-P2.vs.P2"  = c3 <- c(0,0,0,0,0,1,0,0,0,0,-1,0,0),
+              "P2-E2.vs.E2" = c4 <- c(0,0,0,0,-1,0,1,0,0,0,0,0,0),
+              "E1.vs.E2" = c5 <- c(1,0,0,0,-1,0,0,0,0,0,0,0,0),
+              "E2.vs.P1" = c6 <- c(0,0,0,0,-1,0,0,0,1,0,0,0,0),
+              "P1.vs.P2" = c7 <- c(0,0,0,0,0,0,0,0,-1,0,1,0,0),
+              "R.vs.E1." = c8 <- c(1,0,0,0,0,0,0,0,0,0,0,0,-1),
+              "R.vs.E2." = c9 <- c(0,0,0,0,-1,0,0,0,0,0,0,0,-1),
+              "R.vs.P1." = c10 <- c(0,0,0,0,0,0,0,0,1,0,0,0,-1),
+              "R.vs.P2." = c11 <- c(0,0,0,0,0,0,0,0,0,0,1,0,-1),
+              "R-E2.vs.E2" = c12 <- c(0,0,0,0,-1,0,0,1,0,0,0,0,0),
+              "R-E1.vs.E1" = c13 <- c(-1,0,0,1,0,0,0,0,0,0,0,0,0),
+              "R-P1.vs.P1" = c14 <- c(0,0,0,0,0,0,0,0,-1,1,0,0,0),
+              "R-P2.vs.P2" = c1 <- c(0,0,0,0,0,0,0,0,0,0,0,1,-1))
+cmat
+
+
+#summary(glht(m2, linfct = cmat))
+#plot(summary(glht(m1, linfct = cmat)))
+```
+
+
+
+
+###### Now, look at virulence - or the mean day of death.
+
+```{r set up for stats to examine the effects of initial load on overall virulence, include = FALSE}
+  #dplyr::filter(Treatment== "Coinfected") %>% 
+
+lifespan <- df %>%
+  group_by(ID, StrainID, Lineage_type, Lineage) %>%
+  filter(FieldN_2 == "S2") %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, dod2, StrainSpecificInitialDoseZoosporesPermL) %>%
+  distinct() %>% as.data.frame()
+lifespan
+
+```
+
+
+```{r run stats on the effects of initial load on  overall virulence, include = FALSE}
+
+m2lifespan <- glm(dod2  ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL), data = lifespan)
+summary(m2lifespan)
+summary.lm(m2lifespan)
+summ(m2lifespan)
+plot(m2lifespan)
+lmtest::bptest(m2lifespan) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m2lifespan)
+
+
+# P1 coinfections, does
+m3lifespan <- glm(dod2  ~ as.numeric(StrainSpecificInitialDoseZoosporesPermL) + StrainID, data = lifespan)
+summary(m3lifespan)
+summary.lm(m3lifespan)
+summ(m3lifespan)
+plot(m3lifespan)
+lmtest::bptest(m3lifespan) # > 0.05 cannot reject null = variances are  homoskedastic
+coef(m3)
+
+# https://data.library.virginia.edu/getting-started-with-gamma-regression/
+
+# for gamma distributions, the estimate needs to be exponentiated
+exp(coef(m4)[2]) 
+# It appears that each additional initial dose added increased the initial pathogen load by 0.99 
+```
+
+
+
+
+
+```{r subset data for virulence, include = FALSE}
+lifespan <- df %>%
+  group_by(ID, StrainID, Lineage_type, Lineage) %>%
+  filter(FieldN_2 == "S2") %>%
+  mutate(dod2  = sum(Day_swab, na.rm = T)) %>%
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, dod2) %>%
+  distinct() %>% as.data.frame()
+lifespan
+
+
+
+lifespanse <- lifespan %>%
+  group_by(ID, StrainID, Lineage_type) %>%
+  mutate(meandod = mean(dod2, na.rm = TRUE)) %>%
+  dplyr::select(ID, StrainID, Lineage_type, meandod) %>%
+  distinct() %>% as.data.frame()
+lifespanse
+```
+
+
+
+```{r define the contrast matrix for virulence, include = FALSE}
+with(lifespanse, levels(StrainID))
+
+# OLD
+cmat <- rbind("P1.vs.E1-P1" = c1 <- c(0,1,0,0,0,0,0,0,-1,0,0,0,0),
+              "E2-P1.vs.E2" = c2 <- c(0,0,0,0,-1,1,0,0,0,0,0,0,0),
+              "E1-P2.vs.P2"  = c3 <- c(0,0,0,0,0,1,0,0,0,0,-1,0,0),
+              "P2-E2.vs.E2" = c4 <- c(0,0,0,0,-1,0,1,0,0,0,0,0,0),
+              "E1.vs.E2" = c5 <- c(1,0,0,0,-1,0,0,0,0,0,0,0,0),
+              "E2.vs.P1" = c6 <- c(0,0,0,0,-1,0,0,0,1,0,0,0,0),
+              "P1.vs.P2" = c7 <- c(0,0,0,0,0,0,0,0,-1,0,1,0,0),
+              "E1vs.E2vs.P2.vs.R" = c8 <- c(1/4,0,0,0,1/4,0,0,0,0,0,1/4,0,1/4),
+              "R.vs.E1." = c9 <- c(1,0,0,0,0,0,0,0,0,0,0,0,-1),
+              "R-E2.vs.E2" = c10 <- c(0,0,0,0,-1,0,0,1,0,0,0,0,0),
+              "R-E1.vs.E1" = c11 <- c(-1,0,0,1,0,0,0,0,0,0,0,0,0),
+              "R-P1.vs.P1" = c12 <- c(0,0,0,0,0,0,0,0,-1,1,0,0,0),
+              "R-P2.vs.P2" = c13 <- c(0,0,0,0,0,0,0,0,0,0,0,1,-1))
+cmat
+```
+
+
+
+##### Compare R single infection (reference strain) against each other single strain infection
+```{r data subset to compare single infection (reference strain) against each other single strain infection, include = FALSE}
+# USE 
+cmat <- rbind("P1.vs.E1-P1" = c1 <- c(0,1,0,0,0,0,0,0,-1,0,0,0,0),
+              "E2-P1.vs.E2" = c2 <- c(0,0,0,0,-1,1,0,0,0,0,0,0,0),
+              "E1-P2.vs.P2"  = c3 <- c(0,0,0,0,0,1,0,0,0,0,-1,0,0),
+              "P2-E2.vs.E2" = c4 <- c(0,0,0,0,-1,0,1,0,0,0,0,0,0),
+              "E1.vs.E2" = c5 <- c(1,0,0,0,-1,0,0,0,0,0,0,0,0),
+              "E2.vs.P1" = c6 <- c(0,0,0,0,-1,0,0,0,1,0,0,0,0),
+              "P1.vs.P2" = c7 <- c(0,0,0,0,0,0,0,0,-1,0,1,0,0),
+              "R.vs.E1." = c8 <- c(1,0,0,0,0,0,0,0,0,0,0,0,-1),
+              "R.vs.E2." = c9 <- c(0,0,0,0,-1,0,0,0,0,0,0,0,-1),
+              "R.vs.P1." = c10 <- c(0,0,0,0,0,0,0,0,1,0,0,0,-1),
+              "R.vs.P2." = c11 <- c(0,0,0,0,0,0,0,0,0,0,1,0,-1),
+              "R-E2.vs.E2" = c12 <- c(0,0,0,0,-1,0,0,1,0,0,0,0,0),
+              "R-E1.vs.E1" = c13 <- c(-1,0,0,1,0,0,0,0,0,0,0,0,0),
+              "R-P1.vs.P1" = c14 <- c(0,0,0,0,0,0,0,0,-1,1,0,0,0),
+              "R-P2.vs.P2" = c1 <- c(0,0,0,0,0,0,0,0,0,0,0,1,-1))
+cmat
+
+
+#summary(glht(m3, linfct = cmat))
+#plot(summary(glht(m3, linfct = cmat)))
+
+```
+
+
+
+###### Now, calculate a metric of competiveness - or which strain 'wins'
+
+
+```{r subset data for competiveness - or which strain wins, results='hide', inlcude = FALSE, warning=FALSE}
+relbdp1 <- df %>%
+  group_by(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2,  Day_swab, TotalBd) %>%
+  filter(Treatment == "Coinfected") %>%
+  mutate(meanGPL = mean(GPL_pg, na.rm = T)) %>%
+  mutate(totGPL  = sum(GPL_pg, na.rm = T)) %>%
+  mutate(meanBZL = mean(Brazil_pg, na.rm = T)) %>%
+  mutate(totBZL  = sum(Brazil_pg, na.rm = T)) %>%
+  mutate(meanH   = mean(Hybrid , na.rm = T)) %>%
+  mutate(totH    = sum(Hybrid , na.rm = T)) %>%
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2,  Day_swab, meanGPL, totGPL, meanBZL, totBZL, meanH, totH, TotalBd) %>%
+  distinct() %>% as.data.frame()
+head(relbdp1)
+
+relbdp2 <- relbdp1 %>%
+  group_by(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2, Day_swab) %>%
+  mutate(totbd   = sum(totGPL + totBZL + totH, na.rm = T)) %>%
+  mutate(relgpl  = (totGPL/totbd)) %>%
+  group_by(StrainID) %>%
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bdse = sd(totbd, na.rm = TRUE)/sqrt(n())) %>%
+  dplyr::select(ID, StrainID, Lineage_type, Lineage, Treatment, FieldN_2, Day_swab, relgpl) %>%
+  distinct() %>% as.data.frame()
+head(relbdp2)
+
+
+relbdp3 <- relbdp2 %>%
+  group_by(ID, StrainID, Treatment, FieldN_2) %>%
+  filter(Treatment == "Coinfected") %>%
+  filter(FieldN_2 == "S2") %>%
+  mutate(dayofdeath = mean(Day_swab, na.rm = TRUE)) %>%
+  mutate(meanrelgpl = mean(relgpl, na.rm = TRUE)) %>%
+  mutate(nobs = n()) %>%
+  mutate(relgplse = sd(relgpl, na.rm = TRUE)/sqrt(nobs)) %>%
+  mutate(meandod = mean(Day_swab, na.rm = TRUE)) %>%
+  mutate(nobs = n()) %>%
+  mutate(dodse = sd(Day_swab, na.rm = TRUE)/sqrt(nobs)) %>%
+  dplyr::select(ID, StrainID,  Treatment, Lineage_type, meandod, dodse, meanrelgpl, relgplse, dayofdeath) %>%
+  distinct() %>% as.data.frame()
+relbdp3
+
+
+```
+
+
+
+```{r candidate models for competiveness 1, inlcude = FALSE}
+#m4 <- gam(meanrelgpl ~ dayofdeath + s(StrainID, bs = "re"), data = relbdp3)
+#summary(m4)
+#gam.check(m4, k.rep = 1000)
+#m4
+#names(coef(m4))
+#gam.check(m4)
+#g1 <- glht(m4)
+#g1
+
+#contr <- matrix(0, nrow = 4, ncol = length(coef(m4)))
+#colnames(contr) <- names(coef(m4))
+#colnames(contr)
+#rownames(contr) <- c("StrainIDE1-P2 - ", "high - low", "high - med")
+#contr[,1:9]
+```
+
+
+```{r data wrangling for competiveness analyses, include = FALSE}
+
+bds2 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(StrainID == "P1") %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds2
+
+
+
+bds3 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "E2-P2") %>% 
+  dplyr::filter(StrainID != "E1-P2") %>% 
+  dplyr::filter(StrainID != "E1-P2-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "E2-P2-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P2-R") %>% 
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds3
+
+
+# merge datasets for pairwise contrasts
+bds4 <- bind_rows(bds2, bds3)
+
+with(bds4, hist(log(bd1)))
+with(bds4, hist(bd1))
+
+```
+
+
+
+
+
+
+###### check the distribution
+First four plots are normal, then gamma, weibull, and finally log normal.
+```{r check the distribution for comptiveness data, inlcude = FALSE}
+require(fitdistrplus) # 
+# 
+fit.norm     <- fitdist(bds1$bd1,"norm", method = c("mle"))  
+plot(fit.norm)
+fit.gamma    <- fitdist(bds1$bd1,"gamma", method = c("mle"))#best fit
+plot(fit.gamma)
+fit.weibull  <- fitdist(bds1$bd1,"weibull", method = c("mle"))
+plot(fit.weibull)
+fit.lnorm    <- fitdist(bds1$bd1,"lnorm", method = c("mle"))
+plot(fit.lnorm)
+```
+
+
+
+```{r candidate models for competiveness 2, include = FALSE}
+
+# m1 <- glm(bd1 ~ Treatment, family = Gamma(link = "log"), data = bds4)
+# summary(m1)
+# summary.lm(m1)
+# 
+# 
+# m2 <- glm(log(bd1) ~ Treatment,  data = bds4)
+# summary(m2)
+# summary.lm(m2)
+# 
+# AIC(m1, m2)
+
+```
+
+* No difference here, so we will go with the fits above...
+  + above, we see that the log normal fits better - esp. if we consider the Q-Q plot. 
+
+
+```{r set up contrast matrix for compet., include = FALSE}
+# contrasts(bds2$StrainID) <- NULL
+# 
+# with(bds1, levels(StrainID))
+# coef(m1)
+# 
+# contrasts(bds1$StrainID) <- cbind(c(4, -1, -1, -1, -1),
+#                                   c(0,0,0,0,0),
+#                                   c(0,0,0,0,0),
+#                                   c(0,0,0,0,0))
+# contrasts(bds1$StrainID)
+# 
+# m1 <- glm(bd1 ~ StrainID, family = Gamma(link = "log"), data = bds1)
+# summary.lm(m1)
+```
+
+
+##### Second, compare coinfections with P1 to P1 single-genotype infections
+
+```{r subset data, include = FALSE}
+bds2 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(StrainID == "P1") %>%
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds2
+
+
+
+bds3 <- df %>% 
+  group_by(Treatment, Infected, ID, StrainID, Lineage_type, FieldN_2) %>%
+  dplyr::filter(Treatment ==  "Coinfected") %>%
+  dplyr::filter(StrainID != "E2-P2") %>% 
+  dplyr::filter(StrainID != "E1-P2") %>% 
+  dplyr::filter(StrainID != "E1-P2-R") %>% 
+  dplyr::filter(StrainID != "E1-R") %>% 
+  dplyr::filter(StrainID != "E2-P2-R") %>% 
+  dplyr::filter(StrainID != "E2-R") %>% 
+  dplyr::filter(StrainID != "P2-R") %>% 
+  dplyr::filter(FieldN_2 == "S1") %>% 
+  mutate(n_obs = n()) %>% # count the number of observations per group
+  mutate(bd1 = mean(TotalBd, na.rm = TRUE)) %>% 
+  mutate(StrainID = as.factor(StrainID)) %>% 
+  dplyr::select(FieldN_2, Infected, Treatment, ID, StrainID, Lineage_type, bd1) %>%
+  distinct() %>% as.data.frame()
+bds3
+
+
+# merge datasets for pairwise contrasts
+bds4 <- bind_rows(bds2, bds3)
+
+```
+
+
+```{r examine distributions, inlcude = FALSE}
+# fit.norm     <- fitdist(bds4$bd1,"norm", method = c("mle"))  
+# plot(fit.norm)
+# fit.gamma    <- fitdist(bds4$bd1,"gamma", method = c("mle"))#best fit
+# plot(fit.gamma)
+# fit.weibull  <- fitdist(bds4$bd1,"weibull", method = c("mle"))
+# plot(fit.weibull)
+# fit.lnorm    <- fitdist(bds4$bd1,"lnorm", method = c("mle"))
+# plot(fit.lnorm)
+# 
+# with(bds4, hist(bd1))
+
+```
+
+
+
+
+
+1) get the order of the genotypes to be used for multiple comparisons
+```{r post hoc analyses, inlcude = FALSE}
+
+#coef(m3a)
+# 
+# m3a <- glm(log(bd1) ~ StrainID, data = bds4,  na.action = ("na.omit"))
+# summary(m3a)
+# anova(m3a)
+# 
+# with(bds4, class(StrainID))
+# 
+# post.hoc <- glht(m3a, linfct = mcp(group = c("StrainID")))
+
+```
+
+
+
+
+* negative values for the baseline group
+* zero values for those excluded from the group
+* values must = 0
+* Each single-genotype infection compared to P1
+* interactions are in the scale defined by the link function
+
+```{r final check, include = FALSE}
+# K <- matrix(c(1/6, 1/6, 1/6, 1/6, -1, 1/6), 1)
+# t <- glht(m3a, linfct = K)
+# summary(t)
+```
+
+
+
+```{r models for virulence, include = FALSE}
+# m3 <- gam(meandod ~ StrainID, data = lifespanse, family = gaussian)
+# # m1 diagnostics
+# summary(m3)
+# gam.check(m3, k.rep = 1000)
+```
+
+
+```{r next set of candidate models 2, include = FALSE}
+# AIC(m3a, m3b)
+# anova(m3)
+# summary(m3)
+# m3
+# #plot(m3)
+# #summary.lm(m3)
+# 
+# StrainID <- as.factor(trans3$StrainID)
+# 
+# #post.hoc <- glht(m3a, linfct = mcp(StrainID = 'Tukey'), data = trans3)
+# 
+# coef(m3a)
+
+```
+
+2) define the contrast matrix
+* use -1 for the baseline group (here, comparing load in coninfection to the the most virulent strain in the single infections, based on host lifespan). 
+  + This says, does coinfection decrease virulence relative to single infections?
+
+```{r pairwise comparisons for transmission potential, include = FALSE}
+
+# K <- matrix(c(0, 0, 1/2, 0, -1, 1/2), 1)
+# t <- glht(m3a, linfct = K)
+# summary(t)
+# 
+# 
+# K <- matrix(c(1/6, 1/6, 1/6, 1/6, -1, 1/6), 1)
+# t <- glht(m3a, linfct = K)
+# summary(t)
+# 
+# # E2-P1-R 
+# K <- matrix(c(0, 0, 0, 1, -1, 0), 1)
+# t <- glht(m3a, linfct = K)
+# summary(t)
+# 
+# # E1-P1-R
+# K <- matrix(c(0, 1, 0, 0, -1, 0), 1)
+# t <- glht(m3a, linfct = K)
+# summary(t)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

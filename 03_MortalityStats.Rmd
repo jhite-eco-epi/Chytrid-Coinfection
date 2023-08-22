@@ -1,0 +1,123 @@
+---
+title: "03_MortalityStats"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+## Carlvalho et al., 
+***
+
+### Setup and load data
+
+```{r load libraries, echo = FALSE, include = FALSE}
+library(tidyverse)
+require(tidyverse)
+library(jtools)
+library(multcomp)
+library(mgcv)
+library(here)
+```
+
+
+
+```{r load data, echo = FALSE, include = FALSE}
+here()
+df <- read.csv(here("all_GPLxBrazil.csv"), header = T, sep = ",")
+names(df)
+glimpse(df)
+names(df)
+glimpse(df)
+
+```
+
+## Begin Figure 7: % Mortality - virulence
+* [calculate % Mortality](https://campus.datacamp.com/courses/basic-statistics/lab-4-probability-distributions?ex=10)
+  + the mean is calculated by multiplying the number of trials, n, by the prob. of a success, p. 
+    - the prob of success (success or failure), p, is $2/n$
+* sd is the following: $\sqrt(n*p*(1-p))$
+* mean = n * p
+* calculate the total number of trials, n: total animals/strain
+* `mean_chance <- 2/n`
+* [calculate binomial mean and stdev](https://mse.redwoods.edu/darnold/math15/spring2013/R/Activities/MeanVarStd.html)
+
+```{r data wrangling , echo = FALSE, include = FALSE}
+dead <- df %>% 
+  group_by(StrainID, Lineage_type,  FieldN_2) %>%
+  # count only second swab otherwise, the sample size is inflated! 
+  dplyr::filter(FieldN_2 == "S2") %>%  
+  mutate(totInf  = sum(Infected, na.rm = T),
+            totSusc = sum(Susceptible, na.rm = T),
+            N = sum(totSusc + totInf),
+            totDead = sum(Dead, na.rm = TRUE),
+            probdie =  totDead /(totInf + totSusc)) %>% 
+  mutate(meandead = sum(1*probdie)) %>% 
+  mutate(variance = sum((1^2)*meandead) - (meandead^2)) %>% 
+  mutate(stdevD = sqrt(variance)) %>% 
+  dplyr::select(StrainID, Lineage_type, totDead, totSusc, totInf) %>%
+  distinct() %>% as.data.frame()
+dead
+
+
+#cbind (dead, Susceptible)
+
+```
+
+
+
+
+```{r try GAMS, echo = FALSE, include = TRUE}
+# see: https://m-clark.github.io/generalized-additive-models/case_for_gam.html
+
+y <- with(dead, cbind(totDead, (totSusc + totInf)))
+
+# run the full model
+m6 <- gam(y ~ StrainID,  data = dead, family = binomial)
+# m1 diagnostics
+summary(m6)
+gam.check(m6, k.rep = 1000)
+
+
+
+```
+
+## Contrast Matrix
+* use -1 for the baseline group (here, comparing load in coninfection to the the most virulent strain in the single infections, based on host lifespan). 
+  + This says, does coinfection decrease virulence relative to single infections?
+
+```{r define and analyze contrast matrix, echo = FALSE, include = FALSE}
+
+
+with(dead, levels(StrainID))
+
+
+
+
+# USE Compare R single infection (reference strain) against each other single strain infection 
+cmat <- rbind("P1.vs.E1-P1" = c1 <- c(0,1,0,0,0,0,0,0,-1,0,0,0,0),
+              "E2-P1.vs.E2" = c2 <- c(0,0,0,0,-1,1,0,0,0,0,0,0,0),
+              "E1-P2.vs.P2"  = c3 <- c(0,0,0,0,0,1,0,0,0,0,-1,0,0),
+              "P2-E2.vs.E2" = c4 <- c(0,0,0,0,-1,0,1,0,0,0,0,0,0),
+              "E1.vs.E2" = c5 <- c(1,0,0,0,-1,0,0,0,0,0,0,0,0),
+              "E2.vs.P1" = c6 <- c(0,0,0,0,-1,0,0,0,1,0,0,0,0),
+              "P1.vs.P2" = c7 <- c(0,0,0,0,0,0,0,0,-1,0,1,0,0),
+              "R.vs.E1." = c8 <- c(1,0,0,0,0,0,0,0,0,0,0,0,-1),
+              "R.vs.E2." = c9 <- c(0,0,0,0,-1,0,0,0,0,0,0,0,-1),
+              "R.vs.P1." = c10 <- c(0,0,0,0,0,0,0,0,1,0,0,0,-1),
+              "R.vs.P2." = c11 <- c(0,0,0,0,0,0,0,0,0,0,1,0,-1),
+              "R-E2.vs.E2" = c12 <- c(0,0,0,0,-1,0,0,1,0,0,0,0,0),
+              "R-E1.vs.E1" = c13 <- c(-1,0,0,1,0,0,0,0,0,0,0,0,0),
+              "R-P1.vs.P1" = c14 <- c(0,0,0,0,0,0,0,0,-1,1,0,0,0),
+              "R-P2.vs.P2" = c1 <- c(0,0,0,0,0,0,0,0,0,0,0,1,-1))
+cmat
+
+
+#summary(glht(m4, linfct = cmat))
+
+
+
+```
+
